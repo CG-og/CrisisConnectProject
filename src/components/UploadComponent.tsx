@@ -1,17 +1,29 @@
 import React, { useState } from 'react';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Upload, Loader2, CheckCircle2, AlertCircle, Database } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Upload, Loader2, CheckCircle2, AlertCircle, Database, FileText, Activity, RefreshCw, MapPin } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
 
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+
+interface ReportResult {
+  summary: string;
+  transcription: string;
+  urgency_score: number;
+  lat: number;
+  lng: number;
+  imageUrl: string;
+}
 
 export default function UploadComponent() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'done' | 'error'>('idle');
-  const [latestSummary, setLatestSummary] = useState<string | null>(null);
+  const [lastReport, setLastReport] = useState<ReportResult | null>(null);
 
   const seedDemoData = async () => {
     setStatus('processing');
@@ -19,7 +31,7 @@ export default function UploadComponent() {
       const demoReports = [
         { 
           summary: "Severe flooding reported in North Delhi block. 50 families displaced, immediate need for drinking water and dry rations.", 
-          transcription: "Disaster Assessment Form\nLocation: North Delhi, Jahangirpuri Block B\nType: Flash Floods\nDetails: Water level rising quickly since 4 AM. Primary school submerged. Approx 50 households evacuated to high ground. Need: Food, clean water, blankets.",
+          transcription: "# Disaster Assessment Form\n\n**Location:** North Delhi, Jahangirpuri Block B  \n**Incident Type:** Flash Floods  \n\n### Situation Details:\n- Water level rising quickly since 4 AM.\n- Primary school submerged.\n- Approx 50 households evacuated to high ground.\n\n### Immediate Needs:\n| Item | Quantity |\n| :--- | :--- |\n| Drinking Water | 500L |\n| Dry Rations | 100 Packs |\n| Blankets | 200 Units |",
           urgency_score: 9, 
           lat: 28.7041, 
           lng: 77.1025, 
@@ -27,7 +39,7 @@ export default function UploadComponent() {
         },
         { 
           summary: "Structural damage to local school building. No casualties but area evacuated. Tarps and temporary shelter requested.", 
-          transcription: "Site Survey\nArea: South Delhi, Saket Market Area\nIncident: Wall collapse after heavy rain\nStatus: Building unstable. No injuries. Crowds redirected. School closed until structural check. Request: 10 large tarps for temporary cover.",
+          transcription: "# Field Incident Report\n\n**Sector:** South Delhi, Saket Market  \n**Status:** CRITICAL - Structural Instability  \n\n---\n\n**Incident:** Retaining wall collapse followed by facade cracking in Senior Secondary School.  \n**Action Taken:** Immediate evacuation. Perimeter cordoned off.  \n\n**Logistical Request:**\n1. 10x Industrial Grade Tarps\n2. 50x Safety Cones\n3. Structural Engineer assessment within 12 hours.",
           urgency_score: 6, 
           lat: 28.6139, 
           lng: 77.2090, 
@@ -35,7 +47,7 @@ export default function UploadComponent() {
         },
         { 
           summary: "Outbreak of water-borne illness in temporary camp. Medical supplies and chlorine tablets needed urgently.", 
-          transcription: "Medical Help Desk - Camp Alpha\nIssue: Gastrointestinal cases reported in 12 children. Suspected water contamination.\nNeeds: Medical staff, IV fluids, ORS packets, Chlorine tablets for 500 liters capacity.",
+          transcription: "## Medical Alert - Camp Alpha\n\n**Observation:** 12 Pediatric cases of acute gastroenteritis within 6 hours.  \n**Suspected Source:** Local borehole contamination.  \n\n**SUPPLY LIST:**\n*   [ ] 20x IV Saline Bags\n*   [ ] 500x ORS Individual Packets\n*   [ ] 1000x Chlorine purification tabs\n*   [ ] 2x On-site medical volunteers",
           urgency_score: 8, 
           lat: 28.5355, 
           lng: 77.3910, 
@@ -100,22 +112,17 @@ export default function UploadComponent() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Reset the input value so that the user can pick the same file again if needed
     e.target.value = "";
 
     try {
       setUploading(true);
       setStatus('uploading');
       setProgress(10);
-      setLatestSummary(null);
+      setLastReport(null);
       
-      console.log("Starting local AI processing for:", file.name);
-
-      // 1. Compress image for storage in Firestore
       const compressedImage = await compressImage(file);
       setProgress(30);
 
-      // 2. Process with Gemini AI locally on the frontend
       const base64Data = compressedImage.split(',')[1];
       
       setStatus('processing');
@@ -124,7 +131,7 @@ export default function UploadComponent() {
         contents: [
           {
             parts: [
-              { text: "You are a disaster response AI. Read this handwritten survey (it may be in Hindi or another Indian language). 1. Provide a full verbatim transcription of the sheet in English. 2. Provide a 2-sentence executive summary of the critical needs. 3. Assign an urgency score from 1-10. 4. Generate mock latitude and longitude coordinates based on the location mentioned in the sheet. If no location is clear, generate coordinates across the broader North and East India region (lat between 20.0 and 35.0, lng between 74.0 and 92.0)." },
+              { text: "You are a disaster response AI. Read this handwritten survey (it may be in Hindi or another Indian language). 1. Provide a full verbatim transcription of the sheet in English. Use Markdown formatting (bold headers, bullet points, and tables) to closely replicate the structure and layout of the handwritten form. 2. Provide a 2-sentence executive summary of the critical needs. 3. Assign an urgency score from 1-10. 4. Generate mock latitude and longitude coordinates based on the location mentioned in the sheet. If no location is clear, generate coordinates across the broader North and East India region (lat between 20.0 and 35.0, lng between 74.0 and 92.0)." },
               { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
             ]
           }
@@ -147,31 +154,24 @@ export default function UploadComponent() {
 
       const responseText = response.text || "{}";
       const reportData = JSON.parse(responseText.replace(/```json|```/g, "").trim());
-      console.log("AI result:", reportData);
+      
+      const finalReport = {
+        ...reportData,
+        imageUrl: compressedImage
+      };
 
+      setLastReport(finalReport);
       setProgress(80);
-      setLatestSummary(reportData.summary);
 
-      // 3. Save the final report to Firestore with the base64 image
       await addDoc(collection(db, 'reports'), {
-        summary: reportData.summary,
-        transcription: reportData.transcription,
-        urgency_score: reportData.urgency_score,
-        lat: reportData.lat,
-        lng: reportData.lng,
-        imageUrl: compressedImage, // Using base64 directly
+        ...reportData,
+        imageUrl: compressedImage,
         createdAt: serverTimestamp()
       });
 
       setProgress(100);
       setStatus('done');
       setUploading(false);
-      
-      setTimeout(() => {
-        setStatus('idle');
-        setProgress(0);
-        setLatestSummary(null);
-      }, 8000);
 
     } catch (err: any) {
       console.error("Upload/Processing failed:", err);
@@ -180,90 +180,224 @@ export default function UploadComponent() {
     }
   };
 
+  const reset = () => {
+    setStatus('idle');
+    setProgress(0);
+    setLastReport(null);
+  };
+
   return (
-    <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-          <Upload className="w-5 h-5" />
-          Upload Survey Photo
-        </h2>
-        <button
-          onClick={seedDemoData}
-          disabled={status !== 'idle'}
-          className="text-[10px] flex items-center gap-1 px-2 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-600 rounded transition-colors disabled:opacity-50"
-        >
-          <Database className="w-3 h-3" />
-          Seed Demo Data
-        </button>
-      </div>
-      
-      <div className="relative group">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          disabled={uploading}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
-        />
-        <div className={`
-          border-2 border-dashed rounded-lg p-10 text-center transition-all
-          ${status === 'idle' ? 'border-gray-200 group-hover:border-blue-400 bg-gray-50' : ''}
-          ${status === 'uploading' ? 'border-blue-400 bg-blue-50' : ''}
-          ${status === 'processing' ? 'border-amber-400 bg-amber-50' : ''}
-          ${status === 'done' ? 'border-green-400 bg-green-50' : ''}
-          ${status === 'error' ? 'border-red-400 bg-red-50' : ''}
-        `}>
-          {status === 'idle' && (
-            <div className="flex flex-col items-center">
-              <Upload className="w-10 h-10 text-gray-400 mb-2 group-hover:text-blue-500 transition-colors" />
-              <p className="text-gray-600 font-medium">Click or drag photo of survey</p>
-              <p className="text-gray-400 text-sm mt-1">Supports JPG, PNG (Local languages detected automatically)</p>
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl shadow-xl border border-neutral-200 overflow-hidden">
+        <div className="p-6 border-b border-neutral-100 flex items-center justify-between bg-white sticky top-0 z-10">
+          <div className="flex items-center gap-3">
+            <div className="bg-neutral-900 p-2 rounded-lg text-white">
+              <Upload className="w-5 h-5" />
             </div>
-          )}
-
-          {status === 'uploading' && (
-            <div className="flex flex-col items-center">
-              <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-2" />
-              <p className="text-blue-700 font-medium">Uploading to Secure Storage...</p>
-              <div className="w-48 h-2 bg-blue-200 mt-4 rounded-full overflow-hidden">
-                <motion.div 
-                  className="h-full bg-blue-500"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
+            <div>
+              <h3 className="font-black text-neutral-900 tracking-tight">FIELD DATA INGESTION</h3>
+              <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest leading-none mt-1">Optical Character Recognition & Analysis</p>
+            </div>
+          </div>
+          <button
+            onClick={seedDemoData}
+            disabled={status !== 'idle'}
+            className="text-[10px] flex items-center gap-1 px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-600 rounded-lg font-bold uppercase tracking-widest transition-all disabled:opacity-50"
+          >
+            <Database className="w-3 h-3" />
+            Mock Injection
+          </button>
+        </div>
+        
+        <div className="p-8">
+          <div className="relative group">
+            {status !== 'done' && (
+              <>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  disabled={uploading}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
                 />
-              </div>
-            </div>
-          )}
+                <div className={`
+                  border-2 border-dashed rounded-2xl p-12 text-center transition-all min-h-[300px] flex flex-col justify-center
+                  ${status === 'idle' ? 'border-neutral-200 group-hover:border-blue-400 bg-neutral-25' : ''}
+                  ${status === 'uploading' ? 'border-blue-400 bg-blue-50' : ''}
+                  ${status === 'processing' ? 'border-amber-400 bg-amber-50' : ''}
+                  ${status === 'error' ? 'border-red-400 bg-red-50' : ''}
+                `}>
+                  <AnimatePresence mode="wait">
+                    {status === 'idle' && (
+                      <motion.div 
+                        key="idle"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="flex flex-col items-center"
+                      >
+                        <div className="bg-white shadow-sm p-4 rounded-2xl mb-4 group-hover:scale-110 transition-transform">
+                          <Upload className="w-10 h-10 text-neutral-400 group-hover:text-blue-500" />
+                        </div>
+                        <p className="text-neutral-900 font-black text-xl tracking-tight">Drop Sheet Photo Here</p>
+                        <p className="text-neutral-500 font-medium mt-2 max-w-xs mx-auto">Upload handwritten disaster reports for real-time intelligence mapping.</p>
+                        <div className="mt-8 flex gap-4 text-[10px] font-black tracking-widest text-neutral-400 uppercase">
+                          <span>Verified</span>
+                          <span className="w-1 h-1 bg-neutral-300 rounded-full my-auto" />
+                          <span>Translated</span>
+                          <span className="w-1 h-1 bg-neutral-300 rounded-full my-auto" />
+                          <span>Geolocated</span>
+                        </div>
+                      </motion.div>
+                    )}
 
-          {status === 'processing' && (
-            <div className="flex flex-col items-center">
-              <Loader2 className="w-10 h-10 text-amber-500 animate-spin mb-2" />
-              <p className="text-amber-700 font-medium">Gemini AI: Processing & Translating...</p>
-              <p className="text-amber-600 text-sm mt-1 italic italic">Analyzing handwriting and disaster zones...</p>
-            </div>
-          )}
+                    {status === 'uploading' && (
+                      <motion.div 
+                        key="uploading"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex flex-col items-center"
+                      >
+                        <div className="relative">
+                          <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
+                          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-blue-600">
+                            {progress}%
+                          </div>
+                        </div>
+                        <p className="text-blue-900 font-black text-xl tracking-tight uppercase">Buffered Ingestion</p>
+                        <div className="w-64 h-2 bg-blue-200 mt-6 rounded-full overflow-hidden">
+                          <motion.div 
+                            className="h-full bg-blue-500"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </motion.div>
+                    )}
 
-          {status === 'done' && (
-            <div className="flex flex-col items-center text-green-600 px-4">
-              <CheckCircle2 className="w-10 h-10 mb-2" />
-              <p className="font-bold text-lg">Report Successfully Processed!</p>
-              {latestSummary && (
-                <div className="mt-4 p-4 bg-green-100 rounded-lg text-left w-full border border-green-200">
-                  <p className="text-[10px] uppercase font-bold tracking-widest text-green-700 mb-1 leading-none">Intelligence Summary</p>
-                  <p className="text-sm text-green-800 leading-relaxed italic">"{latestSummary}"</p>
+                    {status === 'processing' && (
+                      <motion.div 
+                        key="processing"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex flex-col items-center"
+                      >
+                        <Loader2 className="w-12 h-12 text-amber-500 animate-spin mb-4" />
+                        <p className="text-amber-900 font-black text-xl tracking-tight uppercase">AI Cognitive Analysis</p>
+                        <p className="text-amber-600 font-medium mt-2 animate-pulse italic">Decoding handwriting & identifying coordinates...</p>
+                      </motion.div>
+                    )}
+
+                    {status === 'error' && (
+                      <motion.div 
+                        key="error"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex flex-col items-center text-red-600"
+                      >
+                        <AlertCircle className="w-12 h-12 mb-4" />
+                        <p className="font-black text-xl tracking-tight uppercase">System Exception</p>
+                        <p className="text-red-500 font-medium mt-2">The AI model failed to process this sheet. Verify image quality and retry.</p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              )}
-              <p className="text-xs mt-4 text-green-500">Added to live dashboard and heatmap.</p>
-            </div>
-          )}
+              </>
+            )}
 
-          {status === 'error' && (
-            <div className="flex flex-col items-center text-red-600">
-              <AlertCircle className="w-10 h-10 mb-2" />
-              <p className="font-bold text-lg">Processing Failed</p>
-              <p className="text-sm">Please try again or check your connection.</p>
-            </div>
-          )}
+            {status === 'done' && lastReport && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-8"
+              >
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 p-4 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                    <div>
+                      <p className="font-black text-green-900 tracking-tight">ANALYSIS COMPLETE</p>
+                      <p className="text-[10px] text-green-700 font-bold uppercase tracking-widest leading-none mt-1">Intelligence synchronized with central node</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={reset}
+                    className="flex items-center gap-2 bg-white text-neutral-900 px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all border border-neutral-100"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    New Submission
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">
+                      <FileText className="w-3.5 h-3.5" />
+                      Optical Transcription
+                    </div>
+                    <div className="bg-white text-neutral-900 p-6 rounded-2xl border border-neutral-200 shadow-sm max-h-[400px] overflow-y-auto selection:bg-blue-100">
+                      <div className="prose prose-sm prose-neutral max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {lastReport.transcription}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-500 mb-3">
+                        <Activity className="w-3.5 h-3.5" />
+                        Intelligence Summary
+                      </div>
+                      <div className="bg-blue-50 border border-blue-100 p-5 rounded-2xl italic text-blue-900 font-medium leading-relaxed leading-relaxed shadow-sm">
+                        "{lastReport.summary}"
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100">
+                        <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1">Urgency</p>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xl font-black ${lastReport.urgency_score >= 8 ? 'text-red-600' : 'text-amber-500'}`}>
+                            {lastReport.urgency_score}/10
+                          </span>
+                        </div>
+                      </div>
+                      <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100">
+                        <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1">Coordinates</p>
+                        <div className="flex items-center gap-1 text-neutral-900 font-bold text-xs truncate">
+                          <MapPin className="w-3 h-3 text-neutral-400" />
+                          {lastReport.lat.toFixed(4)}, {lastReport.lng.toFixed(4)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl overflow-hidden border border-neutral-200">
+                       <img 
+                        src={lastReport.imageUrl} 
+                        alt="Original" 
+                        className="w-full h-40 object-cover grayscale hover:grayscale-0 transition-all cursor-crosshair"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl flex gap-4">
+        <div className="bg-amber-500 p-2 rounded-lg text-white self-start">
+          <Database className="w-5 h-5" />
+        </div>
+        <div>
+          <h4 className="font-black text-amber-900 uppercase tracking-tight text-sm">System Guidance</h4>
+          <p className="text-xs text-amber-700 font-medium mt-1 leading-relaxed">
+            AI analysis is performed locally via the Google Gemini node. For best results, ensure sheets are flat and well-lit. 
+            Transcription includes verbatim text even from Indian regional languages.
+          </p>
         </div>
       </div>
     </div>

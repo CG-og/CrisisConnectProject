@@ -4,6 +4,8 @@ import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase
 import { Report } from '../types';
 import { AlertTriangle, Clock, MapPin, Check, Activity, FileText, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function ReportList() {
   const [reports, setReports] = useState<Report[]>([]);
@@ -138,8 +140,14 @@ export default function ReportList() {
                             <FileText className="w-3 h-3" />
                             Full Transcription
                           </div>
-                          <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100 font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
-                            {report.transcription || (
+                          <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100 max-h-48 overflow-y-auto selection:bg-blue-100">
+                            {report.transcription ? (
+                              <div className="prose prose-sm prose-neutral max-w-none prose-p:leading-normal prose-headings:mb-2 prose-headings:mt-0">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {report.transcription}
+                                </ReactMarkdown>
+                              </div>
+                            ) : (
                               <div className="italic text-gray-400">
                                 No transcription available for this report. 
                                 <br />
