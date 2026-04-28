@@ -1,0 +1,6 @@
+{
+  "name": "Crisis-Connect",
+  "description": "Crisis-Connect: AI-powered disaster response platform. Translates and summarizes handwritten field surveys using Gemini, displaying needs on a real-time heatmap dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

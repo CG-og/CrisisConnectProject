@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "Report": {
+      "title": "Crisis Report",
+      "description": "Information about a disaster survey report",
+      "type": "object",
+      "properties": {
+        "imageUrl": { "type": "string", "description": "URL of the uploaded survey photo" },
+        "summary": { "type": "string", "description": "AI-generated English summary of the survey" },
+        "urgency_score": { "type": "integer", "description": "Urgency score from 1 to 10" },
+        "lat": { "type": "number", "description": "Latitude of the report" },
+        "lng": { "type": "number", "description": "Longitude of the report" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of report creation" }
+      },
+      "required": ["imageUrl", "summary", "urgency_score", "lat", "lng", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Collection of disaster reports"
+    }
+  }
+}

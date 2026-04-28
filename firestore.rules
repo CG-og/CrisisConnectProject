@@ -1,0 +1,33 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reports collection
+    match /reports/{reportId} {
+      // For this POC, we allow public reading to show the dashboard
+      allow read: if true;
+      
+      // Allow creation if the data is valid
+      allow create: if isValidReport(request.resource.data);
+      
+      // No updates or deletes in this POC flow
+      allow update, delete: if false;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['imageUrl', 'summary', 'urgency_score', 'lat', 'lng', 'createdAt'])
+        && data.imageUrl is string
+        && data.summary is string
+        && data.urgency_score is number
+        && data.urgency_score >= 1 && data.urgency_score <= 10
+        && data.lat is number
+        && data.lng is number
+        && data.createdAt == request.time;
+    }
+  }
+}
