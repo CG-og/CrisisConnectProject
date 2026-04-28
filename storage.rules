@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /surveys/{allPaths=**} {
+      // Allow any user to upload survey photos for this prototype
+      // In production, you would restrict this to authenticated users
+      allow read, write: if true;
+    }
+  }
+}

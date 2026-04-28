@@ -15,8 +15,11 @@ service cloud.firestore {
       // Allow creation if the data is valid
       allow create: if isValidReport(request.resource.data);
       
-      // No updates or deletes in this POC flow
-      allow update, delete: if false;
+      // Allow deletion for responding to reports
+      allow delete: if true;
+      
+      // No updates in this POC flow
+      allow update: if false;
     }
 
     function isValidReport(data) {
