@@ -25,50 +25,6 @@ export default function UploadComponent() {
   const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'done' | 'error'>('idle');
   const [lastReport, setLastReport] = useState<ReportResult | null>(null);
 
-  const seedDemoData = async () => {
-    setStatus('processing');
-    try {
-      const demoReports = [
-        { 
-          summary: "Severe flooding reported in North Delhi block. 50 families displaced, immediate need for drinking water and dry rations.", 
-          transcription: "# Disaster Assessment Form\n\n**Location:** North Delhi, Jahangirpuri Block B  \n**Incident Type:** Flash Floods  \n\n### Situation Details:\n- Water level rising quickly since 4 AM.\n- Primary school submerged.\n- Approx 50 households evacuated to high ground.\n\n### Immediate Needs:\n| Item | Quantity |\n| :--- | :--- |\n| Drinking Water | 500L |\n| Dry Rations | 100 Packs |\n| Blankets | 200 Units |",
-          urgency_score: 9, 
-          lat: 28.7041, 
-          lng: 77.1025, 
-          imageUrl: "https://images.unsplash.com/photo-1547683905-f686c993a9e8?auto=format&fit=crop&q=80&w=200" 
-        },
-        { 
-          summary: "Structural damage to local school building. No casualties but area evacuated. Tarps and temporary shelter requested.", 
-          transcription: "# Field Incident Report\n\n**Sector:** South Delhi, Saket Market  \n**Status:** CRITICAL - Structural Instability  \n\n---\n\n**Incident:** Retaining wall collapse followed by facade cracking in Senior Secondary School.  \n**Action Taken:** Immediate evacuation. Perimeter cordoned off.  \n\n**Logistical Request:**\n1. 10x Industrial Grade Tarps\n2. 50x Safety Cones\n3. Structural Engineer assessment within 12 hours.",
-          urgency_score: 6, 
-          lat: 28.6139, 
-          lng: 77.2090, 
-          imageUrl: "https://images.unsplash.com/photo-1580974852861-ce383320f781?auto=format&fit=crop&q=80&w=200" 
-        },
-        { 
-          summary: "Outbreak of water-borne illness in temporary camp. Medical supplies and chlorine tablets needed urgently.", 
-          transcription: "## Medical Alert - Camp Alpha\n\n**Observation:** 12 Pediatric cases of acute gastroenteritis within 6 hours.  \n**Suspected Source:** Local borehole contamination.  \n\n**SUPPLY LIST:**\n*   [ ] 20x IV Saline Bags\n*   [ ] 500x ORS Individual Packets\n*   [ ] 1000x Chlorine purification tabs\n*   [ ] 2x On-site medical volunteers",
-          urgency_score: 8, 
-          lat: 28.5355, 
-          lng: 77.3910, 
-          imageUrl: "https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?auto=format&fit=crop&q=80&w=200" 
-        },
-      ];
-
-      for (const report of demoReports) {
-        await addDoc(collection(db, 'reports'), {
-          ...report,
-          createdAt: serverTimestamp()
-        });
-      }
-      setStatus('done');
-      setTimeout(() => setStatus('idle'), 2000);
-    } catch (err) {
-      console.error(err);
-      setStatus('error');
-    }
-  };
-
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -199,14 +155,6 @@ export default function UploadComponent() {
               <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest leading-none mt-1">Optical Character Recognition & Analysis</p>
             </div>
           </div>
-          <button
-            onClick={seedDemoData}
-            disabled={status !== 'idle'}
-            className="text-[10px] flex items-center gap-1 px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-600 rounded-lg font-bold uppercase tracking-widest transition-all disabled:opacity-50"
-          >
-            <Database className="w-3 h-3" />
-            Mock Injection
-          </button>
         </div>
         
         <div className="p-8">
