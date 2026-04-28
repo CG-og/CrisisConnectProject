@@ -124,7 +124,7 @@ export default function UploadComponent() {
         contents: [
           {
             parts: [
-              { text: "You are a disaster response AI. Read this handwritten survey (it may be in Hindi or another Indian language). 1. Provide a full verbatim transcription of the sheet in English. 2. Provide a 2-sentence executive summary of the critical needs. 3. Assign an urgency score from 1-10. 4. Finally, generate mock latitude and longitude coordinates near New Delhi, India for demo purposes (lat between 28.5 and 28.7, lng between 77.1 and 77.3)." },
+              { text: "You are a disaster response AI. Read this handwritten survey (it may be in Hindi or another Indian language). 1. Provide a full verbatim transcription of the sheet in English. 2. Provide a 2-sentence executive summary of the critical needs. 3. Assign an urgency score from 1-10. 4. Generate mock latitude and longitude coordinates based on the location mentioned in the sheet. If no location is clear, generate coordinates across the broader North and East India region (lat between 20.0 and 35.0, lng between 74.0 and 92.0)." },
               { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
             ]
           }
